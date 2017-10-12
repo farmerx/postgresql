@@ -19,3 +19,30 @@ CREATE INDEX trgm_idx ON test_trgm USING gist (t gist_trgm_ops);
 ```
 CREATE INDEX trgm_idx ON test_trgm USING gin (t gin_trgm_ops);
 ```
+
+## 封装添加pg_trgm索引方法
+
+```
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+CREATE OR REPLACE FUNCTION create_gin_trgm_index_if_not_exists(table_name text, column_names anyarray, unique_str text, index_type text) RETURNS void AS $BODY$
+DECLARE
+  full_index_name varchar;
+  schema_name varchar;
+BEGIN
+full_index_name = table_name || '_' || array_to_string(column_names, '_') || '_idx';
+full_index_name = replace(full_index_name, ' ', '');
+schema_name     = 'public';
+IF NOT EXISTS (
+    SELECT 1
+    FROM   pg_class c
+    JOIN   pg_namespace n ON n.oid = c.relnamespace
+    WHERE  c.relname = full_index_name
+    AND    n.nspname = schema_name
+    ) THEN
+    execute 'CREATE ' || unique_str || ' INDEX ' || full_index_name || ' ON ' || schema_name || '.' || table_name || ' USING '|| index_type ||' (' || array_to_string(column_names, ',') || ' gin_trgm_ops) ';
+END IF;
+END
+$BODY$ LANGUAGE plpgsql;
+
+```
